@@ -1,11 +1,4 @@
-"""
-Article Checker — Backend
-- ChromaDB for persistent vector storage
-- Ollama for embeddings (nomic-embed-text) and reasoning (qwen3)
-- Streaming SSE for real-time fact-check results
-- Server-side PDF/DOCX/TXT extraction
-- Auto-opens browser on startup
-"""
+
 
 import asyncio
 import importlib
@@ -28,7 +21,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# ─── CONFIG ───────────────────────────────────────────────────────────────────
+
 
 OLLAMA_BASE     = "http://localhost:11434"
 EMBED_MODEL     = "nomic-embed-text"
@@ -39,7 +32,6 @@ TOP_K           = 8
 OLLAMA_TIMEOUT  = 180
 PORT            = 8000
 
-# ─── CHROMA ───────────────────────────────────────────────────────────────────
 
 chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
 collection = chroma_client.get_or_create_collection(
@@ -47,7 +39,6 @@ collection = chroma_client.get_or_create_collection(
     metadata={"hnsw:space": "cosine"}
 )
 
-# ─── APP ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Article Checker")
 app.add_middleware(
@@ -55,7 +46,6 @@ app.add_middleware(
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
-# ─── TEXT EXTRACTION ──────────────────────────────────────────────────────────
 
 def extract_text_from_file(filename: str, data: bytes) -> str:
     ext = Path(filename).suffix.lower()
@@ -78,7 +68,7 @@ def extract_text_from_file(filename: str, data: bytes) -> str:
         return "\n".join(parts)
 
     if ext == ".pdf":
-        # pymupdf can be imported as either 'fitz' or 'pymupdf' depending on version
+
         fitz = None
         for mod_name in ("fitz", "pymupdf"):
             try:
@@ -98,7 +88,6 @@ def extract_text_from_file(filename: str, data: bytes) -> str:
     raise ValueError(f"Unsupported file type: '{ext}'. Accepted: .txt, .pdf, .docx")
 
 
-# ─── SENTENCE SPLITTING ───────────────────────────────────────────────────────
 
 def split_sentences(text: str) -> list[str]:
     text = re.sub(r"\s+", " ", text).strip()
@@ -106,13 +95,12 @@ def split_sentences(text: str) -> list[str]:
     return [s.strip() for s in raw if len(s.strip()) > 15]
 
 
-# ─── OLLAMA ───────────────────────────────────────────────────────────────────
 
 async def embed(texts: list[str]) -> list[list[float]]:
     vectors = []
     async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
         for text in texts:
-            # Truncate to 500 words — stays well within nomic-embed-text's 2048 token limit
+      
             truncated = " ".join(text.split()[:500])
             last_err = None
             for attempt in range(3):
@@ -126,7 +114,7 @@ async def embed(texts: list[str]) -> list[list[float]]:
                     break
                 except httpx.HTTPStatusError as e:
                     last_err = e
-                    await asyncio.sleep(1.5 * (attempt + 1))  # 1.5s, 3s, 4.5s
+                    await asyncio.sleep(1.5 * (attempt + 1))  
             else:
                 raise last_err
     return vectors
@@ -189,7 +177,6 @@ Respond with ONLY these four lines. No preamble, no thinking tags, no extra text
     }
 
 
-# ─── ROUTES: LIBRARY ──────────────────────────────────────────────────────────
 
 @app.get("/articles")
 async def list_articles():
@@ -260,7 +247,6 @@ async def delete_article(name: str):
     return {"deleted": len(existing["ids"]), "article": name}
 
 
-# ─── ROUTES: FACT-CHECK (STREAMING) ───────────────────────────────────────────
 
 class CheckRequest(BaseModel):
     text: str
@@ -330,7 +316,6 @@ async def extract_text_endpoint(file: UploadFile = File(...)):
     return {"text": text, "filename": file.filename}
 
 
-# ─── ROUTES: STATUS ───────────────────────────────────────────────────────────
 
 @app.get("/status")
 async def status():
